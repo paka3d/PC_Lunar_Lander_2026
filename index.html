@@ -1,0 +1,1117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Lunar Lander — Rescue Mission</title>
+<style>
+  :root { --hud: #7CFC9A; }
+  html, body { margin:0; padding:0; overflow:hidden; background:#000; height:100%; font-family:"Courier New", monospace; touch-action:none; }
+  #game { position:fixed; inset:0; }
+  canvas { display:block; }
+  .hud { position:fixed; color:var(--hud); text-shadow:0 0 6px rgba(124,252,154,.5); user-select:none; z-index:5; letter-spacing:1px; }
+  #hud-left  { top:12px; left:14px; font-size:14px; line-height:1.5; }
+  #hud-right { top:12px; right:14px; font-size:14px; text-align:right; line-height:1.5; }
+  .bar-shell { width:160px; height:13px; border:1px solid var(--hud); margin-top:3px; background:rgba(0,0,0,.4); }
+  .bar-fill  { height:100%; width:100%; background:linear-gradient(90deg,#2e8b3f,var(--hud)); transition:width .1s linear; }
+  .bar-fill.low { background:linear-gradient(90deg,#8b2e2e,#ff6b4a); }
+  .paxrow { margin-top:4px; }
+  .slot { display:inline-block; width:13px; height:13px; border-radius:50%; border:1px solid var(--hud); margin-left:4px; vertical-align:-2px; }
+  .slot.full { background:var(--hud); box-shadow:0 0 8px rgba(124,252,154,.9); }
+  #msg {
+    position:fixed; left:50%; top:16%; transform:translate(-50%,-50%);
+    color:var(--hud); font-size:22px; text-align:center; z-index:6; max-width:92vw;
+    text-shadow:0 0 14px rgba(124,252,154,.8); user-select:none; padding:0 10px;
+  }
+  #overlay {
+    position:fixed; inset:0; z-index:10; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:16px;
+    background:radial-gradient(ellipse at center, rgba(0,0,0,.55), rgba(0,0,0,.88));
+    color:var(--hud); text-align:center; user-select:none;
+  }
+  #overlay h1 { font-size:44px; margin:0; letter-spacing:6px; text-shadow:0 0 18px rgba(124,252,154,.9); }
+  #overlay .body { font-size:15px; line-height:1.9; }
+  #overlay .keys { font-size:13px; opacity:.85; }
+  #overlay button {
+    font-family:inherit; font-size:19px; letter-spacing:2px; padding:12px 34px;
+    color:#04120a; background:var(--hud); border:none; cursor:pointer;
+    box-shadow:0 0 22px rgba(124,252,154,.7);
+  }
+  #overlay button:active { filter:brightness(1.15); }
+  .hidden { display:none !important; }
+  /* ---- touch controls ---- */
+  #touch { position:fixed; inset:0; z-index:8; pointer-events:none; }
+  #touch .cl { position:absolute; bottom:18px; display:flex; gap:14px; pointer-events:auto; }
+  #touch .cl.left  { left:18px; }
+  #touch .cl.right { right:18px; flex-direction:column; align-items:flex-end; gap:12px; }
+  #touch button {
+    width:74px; height:74px; border-radius:50%;
+    border:2px solid rgba(124,252,154,.8); color:var(--hud);
+    background:rgba(10,30,18,.45); font-size:26px; font-family:inherit;
+    backdrop-filter:blur(2px); user-select:none; -webkit-user-select:none; touch-action:none;
+  }
+  #touch button.big { width:96px; height:96px; font-size:15px; letter-spacing:1px; font-weight:bold; }
+  #touch button.small { width:64px; height:64px; font-size:13px; }
+  #touch button.on { background:rgba(124,252,154,.5); color:#04120a; }
+  /* ---- radar ---- */
+  #radar { position:fixed; left:16px; top:170px; z-index:5; user-select:none; }
+  .radar-title { color:var(--hud); font-size:11px; letter-spacing:3px; opacity:.85; text-align:center; margin-bottom:4px; text-shadow:0 0 6px rgba(124,252,154,.5); }
+  #radarcv { display:block; width:150px; height:150px; border-radius:50%; background:rgba(3,14,8,.9); box-shadow:0 0 18px rgba(124,252,154,.22); }
+  .radar-legend { display:flex; gap:9px; justify-content:center; margin-top:5px; font-size:9px; letter-spacing:1px; color:var(--hud); opacity:.8; }
+  .lg::before { content:''; display:inline-block; width:7px; height:7px; margin-right:4px; vertical-align:-1px; }
+  .lg.pad::before { background:#7CFC9A; transform:rotate(45deg); }
+  .lg.crew::before { background:#ffb020; border-radius:50%; }
+  .lg.rock::before { background:#9696a0; border-radius:50%; width:5px; height:5px; }
+  /* ---- fuel synth ---- */
+  #synthbtn {
+    position:fixed; left:50%; bottom:26px; transform:translateX(-50%);
+    z-index:7; font-family:inherit; letter-spacing:1px; font-size:14px;
+    padding:10px 20px; border-radius:8px; border:1px solid rgba(124,252,154,.7);
+    color:var(--hud); background:rgba(6,20,12,.6); cursor:pointer; user-select:none;
+  }
+  #synthbtn:not(.dim) { box-shadow:0 0 16px rgba(124,252,154,.5); animation:synthpulse 1.6s infinite; }
+  #synthbtn.dim { opacity:.45; cursor:default; box-shadow:none; animation:none; }
+  @keyframes synthpulse { 50% { box-shadow:0 0 28px rgba(124,252,154,.9); } }
+  #mini {
+    position:fixed; left:50%; top:40%; transform:translate(-50%,-50%);
+    z-index:12; background:rgba(2,12,7,.94); border:1px solid rgba(124,252,154,.7);
+    padding:20px 28px; text-align:center; color:var(--hud);
+    box-shadow:0 0 34px rgba(124,252,154,.28); user-select:none;
+  }
+  #mini h2 { margin:0 0 14px; letter-spacing:3px; font-size:19px; }
+  #minislots { display:flex; gap:10px; justify-content:center; margin-bottom:14px; }
+  .mslot {
+    width:46px; height:46px; border:1px solid rgba(124,252,154,.5);
+    display:flex; align-items:center; justify-content:center; font-size:22px; opacity:.5;
+  }
+  .mslot.cur { opacity:1; border-color:var(--hud); box-shadow:0 0 12px rgba(124,252,154,.8); transform:scale(1.1); }
+  .mslot.done { opacity:1; background:rgba(124,252,154,.28); border-color:var(--hud); }
+  #ministatus { font-size:14px; min-height:20px; letter-spacing:1px; }
+  #mini .hint { font-size:11px; opacity:.6; margin:10px 0 0; }
+  #minidpad {
+    position:fixed; left:50%; bottom:26px; transform:translateX(-50%);
+    z-index:12; display:grid; grid-template-columns:repeat(3,64px); grid-template-rows:repeat(2,54px); gap:8px;
+  }
+  #minidpad button {
+    width:64px; height:54px; border-radius:10px; border:2px solid rgba(124,252,154,.8);
+    color:var(--hud); background:rgba(10,30,18,.55); font-size:20px; font-family:inherit;
+    touch-action:none; user-select:none; -webkit-user-select:none;
+  }
+  #minidpad button.on { background:rgba(124,252,154,.5); color:#04120a; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+</script>
+</head>
+<body>
+<div id="game"></div>
+
+<div class="hud" id="hud-left">
+  FUEL
+  <div class="bar-shell"><div class="bar-fill" id="fuelbar"></div></div>
+  VEL <span id="vel">0.0</span> m/s
+  &nbsp;ALT <span id="alt">0</span> m
+  <div class="paxrow">CREW <span id="pax"></span></div>
+</div>
+<div class="hud" id="hud-right">
+  STAGE <span id="stage">1</span>
+  <br/>SCORE <span id="score">0</span>
+  <br/>RESCUE <span id="rescue">0</span>
+  <br/><span style="opacity:.65;font-size:11px;">[R] RETRY STAGE</span>
+</div>
+
+<div id="radar">
+  <div class="radar-title">RADAR</div>
+  <canvas id="radarcv"></canvas>
+  <div class="radar-legend">
+    <span class="lg pad">PAD</span><span class="lg crew">CREW</span><span class="lg rock">ROCK</span>
+  </div>
+</div>
+
+<div id="msg" class="hidden"></div>
+<div id="overlay" class="hidden"></div>
+
+<div id="touch" class="hidden">
+  <div class="cl left">
+    <button data-k="L" aria-label="rotate left">⟲</button>
+    <button data-k="R" aria-label="rotate right">⟳</button>
+  </div>
+  <div class="cl right">
+    <button data-k="B" class="small" aria-label="brake">BRAKE</button>
+    <button data-k="U" class="big" aria-label="thrust">THRUST</button>
+  </div>
+</div>
+
+<div id="synthbtn" class="hidden"></div>
+
+<div id="mini" class="hidden">
+  <h2>⚡ FUEL SYNTH</h2>
+  <div id="minislots"></div>
+  <div id="ministatus">REPRODUCE THE SEQUENCE</div>
+  <p class="hint">ARROW KEYS / WASD &nbsp;•&nbsp; [ESC] CANCEL</p>
+</div>
+
+<div id="minidpad" class="hidden">
+  <span></span><button data-d="0" aria-label="up">▲</button><span></span>
+  <button data-d="2" aria-label="left">◀</button><button data-d="1" aria-label="down">▼</button><button data-d="3" aria-label="right">▶</button>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+
+/* ================= renderer / scene ================= */
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.getElementById('game').appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x02020a);
+const camera = new THREE.PerspectiveCamera(50, innerWidth/innerHeight, 0.1, 3000);
+camera.position.set(0, 20, 46);
+
+const sun = new THREE.DirectionalLight(0xfff4e0, 2.4);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+const sc = sun.shadow.camera;
+sc.left=-80; sc.right=80; sc.top=70; sc.bottom=-70; sc.far=500;
+scene.add(sun); scene.add(sun.target);
+scene.add(new THREE.AmbientLight(0x30304a, 0.9));
+const rim = new THREE.DirectionalLight(0x8899ff, 0.35);
+rim.position.set(-60, 20, -80);
+scene.add(rim);
+
+/* stars */
+{
+  const n = 1500, pos = new Float32Array(n*3);
+  for (let i=0;i<n;i++){
+    const v = new THREE.Vector3().randomDirection().multiplyScalar(700+Math.random()*500);
+    pos.set([v.x,v.y,v.z],i*3);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos,3));
+  scene.add(new THREE.Points(g, new THREE.PointsMaterial({color:0xffffff,size:1.6,sizeAttenuation:false,transparent:true,opacity:.9})));
+}
+/* earth */
+{
+  const earth = new THREE.Mesh(new THREE.SphereGeometry(20, 48, 48),
+    new THREE.MeshStandardMaterial({ color:0x3a6fd8, roughness:1, emissive:0x0a1a40, emissiveIntensity:.4 }));
+  earth.position.set(-160, 150, -320);
+  scene.add(earth);
+  earth.add(new THREE.Mesh(new THREE.SphereGeometry(22, 48, 48),
+    new THREE.MeshBasicMaterial({ color:0x66aaff, transparent:true, opacity:.12, side:THREE.BackSide })));
+}
+
+/* ================= config ================= */
+const WORLD_W = 460, N = 151, STEP = WORLD_W/(N-1);
+const H_MIN = -30, H_MAX = 36;
+const G = 1.62, THRUST = 4.8, BRAKE = 2.3, ROT_RATE = 2.1;
+const FUEL_MAX = 250, FUEL_RATE = 7.0, BRAKE_RATE = 3.5;
+const SYNTH_REWARD = 40, SYNTH_CD = 3;   /* fuel mini-game reward + failure cooldown (s) */
+const MAX_PAX = 3, RESCUE_RADIUS = 9;
+const VSAFE = 1.7, HSAFE = 2.3, ASAFE = 0.32;
+
+/* ================= state ================= */
+let stage = 1, score = 0;
+let px=0, py=40, vx=0, vy=0, ang=0, angV=0, fuel=FUEL_MAX;
+let state = 'ready';                 // ready | playing | clearing | crashed
+let grounded = false;
+let pax = 0;
+let heights = [];
+let pads = [], astronauts = [], boulders = [], shuttles = [];
+let worldGroup = null, terrainMesh = null;
+let fuelOutWarned = false;
+let mini = null;    /* { seq:[dirs], idx } active fuel-synth attempt */
+let synthCd = 0;    /* cooldown after a failed synth (s) */
+
+/* ================= hud / overlay ================= */
+const hud = {
+  fuelbar: document.getElementById('fuelbar'),
+  vel: document.getElementById('vel'),
+  alt: document.getElementById('alt'),
+  pax: document.getElementById('pax'),
+  stage: document.getElementById('stage'),
+  score: document.getElementById('score'),
+  rescue: document.getElementById('rescue'),
+  msg: document.getElementById('msg'),
+  overlay: document.getElementById('overlay'),
+};
+let msgTimer = null;
+function showMsg(text, color = '#7CFC9A'){
+  hud.msg.textContent = text;
+  hud.msg.style.color = color;
+  hud.msg.style.textShadow = `0 0 14px ${color}88`;
+  hud.msg.classList.remove('hidden');
+  clearTimeout(msgTimer);
+  msgTimer = setTimeout(() => hud.msg.classList.add('hidden'), 4500);
+}
+function hideMsg(){ clearTimeout(msgTimer); hud.msg.classList.add('hidden'); }
+function showOverlay(title, lines, btnLabel, cb, color = '#7CFC9A'){
+  hud.overlay.innerHTML =
+    `<h1 style="color:${color};text-shadow:0 0 18px ${color}99">${title}</h1>` +
+    `<div class="body">${lines}</div>` +
+    `<button id="ovbtn">${btnLabel}</button>`;
+  hud.overlay.classList.remove('hidden');
+  document.getElementById('ovbtn').onclick = () => { hud.overlay.classList.add('hidden'); cb(); };
+}
+function hudUpdate(){
+  const sp = Math.hypot(vx,vy);
+  hud.vel.textContent = sp.toFixed(1);
+  hud.alt.textContent = Math.max(0, Math.round(py - groundYAt(px) - 1.4));
+  hud.stage.textContent = stage;
+  hud.score.textContent = score;
+  hud.rescue.textContent = astronauts.filter(a=>a.state==='stranded').length;
+  hud.pax.innerHTML = [0,1,2].map(i=>`<span class="slot ${i<pax?'full':''}"></span>`).join('');
+  const pct = fuel/FUEL_MAX*100;
+  hud.fuelbar.style.width = pct + '%';
+  hud.fuelbar.classList.toggle('low', pct < 25);
+  const deg = Math.round((((ang%(Math.PI*2))+Math.PI*2)%(Math.PI*2)) * 180/Math.PI);
+  /* fuel synth button state */
+  const sb = document.getElementById('synthbtn');
+  if (mini || state !== 'playing' || !grounded){
+    sb.classList.add('hidden');
+  } else {
+    sb.classList.remove('hidden');
+    if (synthCd > 0){ sb.textContent = '⚡ SYNTH COOLING…'; sb.classList.add('dim'); }
+    else { sb.textContent = '⚡ SYNTH FUEL [F]'; sb.classList.remove('dim'); }
+  }
+}
+
+/* ================= audio ================= */
+const audio = {
+  ctx:null, gain:null,
+  ensure(){
+    if (this.ctx) { this.ctx.resume(); return; }
+    this.ctx = new (window.AudioContext||window.webkitAudioContext)();
+    const len = this.ctx.sampleRate;
+    const buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i=0;i<len;i++) d[i] = Math.random()*2-1;
+    const src = this.ctx.createBufferSource();
+    src.buffer = buf; src.loop = true;
+    const filt = this.ctx.createBiquadFilter();
+    filt.type='lowpass'; filt.frequency.value = 520;
+    this.gain = this.ctx.createGain(); this.gain.gain.value = 0;
+    src.connect(filt); filt.connect(this.gain); this.gain.connect(this.ctx.destination);
+    src.start();
+  },
+  thrust(on, strong){
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    this.gain.gain.cancelScheduledValues(t);
+    this.gain.gain.linearRampToValueAtTime(on ? (strong?0.13:0.05) : 0, t+0.08);
+  },
+  beep(freq, dur=0.12, type='square', vol=0.05){
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    const o = this.ctx.createOscillator(); o.type = type; o.frequency.value = freq;
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t+dur);
+    o.connect(g); g.connect(this.ctx.destination);
+    o.start(t); o.stop(t+dur);
+  },
+  fanfare(kind){
+    if (kind==='rescue'){ this.beep(660,.1); setTimeout(()=>this.beep(990,.14),110); }
+    else if (kind==='deliver'){ this.beep(523,.1); setTimeout(()=>this.beep(659,.1),110); setTimeout(()=>this.beep(784,.18),220); }
+    else if (kind==='stage'){ [523,659,784,1046].forEach((f,i)=>setTimeout(()=>this.beep(f,.16),i*130)); }
+    else if (kind==='crash'){ this.beep(160,.5,'sawtooth',.09); }
+  }
+};
+
+/* ================= terrain & stage building ================= */
+function buildStage(){
+  if (worldGroup) scene.remove(worldGroup);
+  if (terrainMesh) scene.remove(terrainMesh);
+  if (terrainMesh) terrainMesh.geometry.dispose();
+  worldGroup = new THREE.Group();
+  scene.add(worldGroup);
+  pads = []; astronauts = []; boulders = []; shuttles = [];
+  pax = 0; grounded = false; fuelOutWarned = false;
+
+  /* terrain: layered sines for cliffs + caverns */
+  const amp = 1 + Math.min(0.7, (stage-1)*0.13);
+  const f1 = 1.1 + Math.random()*0.6, f2 = 3 + Math.random()*2.5, f3 = 8 + Math.random()*6;
+  const p1 = Math.random()*6.28, p2 = Math.random()*6.28, p3 = Math.random()*6.28;
+  heights = [];
+  for (let i=0;i<N;i++){
+    const t = i/(N-1);
+    let h = 19*amp*Math.sin(t*Math.PI*2*f1 + p1)
+          + 6.5*amp*Math.sin(t*Math.PI*2*f2 + p2)
+          + 2*amp*Math.sin(t*Math.PI*2*f3 + p3)
+          + (Math.random()-0.5)*2.5;
+    heights.push(Math.max(H_MIN, Math.min(H_MAX, h)));
+  }
+
+  const xOf = i => i*STEP - WORLD_W/2;
+  const taken = [];
+  const tooClose = (i, min) => taken.some(t => Math.abs(t-i) < min);
+
+  /* ---- landing pads (delivery + fuel) ---- */
+  const padCount = stage >= 3 ? 3 : 2;
+  for (let k=0;k<padCount;k++){
+    let i, guard = 0;
+    do { i = 8 + Math.floor(Math.random()*(N-16)); guard++; } while (tooClose(i, 18) && guard < 40);
+    taken.push(i);
+    const half = 4;
+    let base = 0;
+    for (let j=i-half;j<=i+half;j++) base += heights[j];
+    base /= (2*half+1);
+    for (let j=i-half;j<=i+half;j++) heights[j] = base;
+    const depthBonus = Math.max(0, -base);
+    const heightBonus = Math.max(0, base - 10);
+    const pad = {
+      x: xOf(i), y: base, w: 12,
+      isDeep: base < -4, isCliff: base > 12,
+      scoreMult: 1 + depthBonus*0.06 + heightBonus*0.02,
+      fuelBonus: 25 + depthBonus*3.2 + heightBonus*1.0,
+      delivered: [],
+    };
+    pads.push(pad);
+    worldGroup.add(makePad(pad));
+  }
+
+  /* ---- stranded astronauts ---- */
+  const aCount = Math.min(2 + stage, 6);
+  for (let k=0;k<aCount;k++){
+    let i, guard = 0;
+    do { i = 6 + Math.floor(Math.random()*(N-12)); guard++; } while (tooClose(i, 12) && guard < 60);
+    taken.push(i);
+    for (let j=i-1;j<=i+1;j++) heights[j] = heights[i]; // flat rescue spot
+    const a = { x: xOf(i), y: heights[i], state:'stranded', mesh: makeAstronaut() };
+    a.mesh.position.set(a.x, a.y + 0.02, 2);
+    astronauts.push(a);
+    worldGroup.add(a.mesh);
+  }
+
+  /* ---- boulders ---- */
+  const bCount = Math.min(5 + stage*2, 16);
+  for (let k=0;k<bCount;k++){
+    let i, guard = 0;
+    do { i = 4 + Math.floor(Math.random()*(N-8)); guard++; } while (tooClose(i, 7) && guard < 40);
+    const r = 1.1 + Math.random()*1.7;
+    const m = new THREE.Mesh(new THREE.DodecahedronGeometry(r, 0),
+      new THREE.MeshStandardMaterial({ color: 0x77777e, roughness:1 }));
+    const x = xOf(i);
+    m.position.set(x, heights[i] + r*0.55, (Math.random()-0.5)*8);
+    m.rotation.set(Math.random()*3, Math.random()*3, Math.random()*3);
+    m.castShadow = m.receiveShadow = true;
+    worldGroup.add(m);
+    boulders.push({ x, y: heights[i] + r*0.5, r });
+  }
+
+  /* ---- decorative rocks ---- */
+  for (let k=0;k<30;k++){
+    const x = (Math.random()*0.96+0.02)*WORLD_W - WORLD_W/2;
+    const s = 0.25 + Math.random()*0.6;
+    const b = new THREE.Mesh(new THREE.DodecahedronGeometry(s,0),
+      new THREE.MeshStandardMaterial({ color:0x707078, roughness:1 }));
+    b.position.set(x, terrainAt(x)+s*0.3, (Math.random()-0.5)*12);
+    b.rotation.set(Math.random(),Math.random(),Math.random());
+    b.castShadow = b.receiveShadow = true;
+    worldGroup.add(b);
+  }
+
+  /* terrain mesh */
+  const shape = new THREE.Shape();
+  shape.moveTo(-WORLD_W/2, H_MIN-4);
+  for (let i=0;i<N;i++) shape.lineTo(i*STEP - WORLD_W/2, heights[i]);
+  shape.lineTo(WORLD_W/2, H_MIN-4);
+  const geo = new THREE.ExtrudeGeometry(shape, { depth:16, bevelEnabled:false });
+  terrainMesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color:0x8f8f96, roughness:1 }));
+  terrainMesh.position.z = -8;
+  terrainMesh.receiveShadow = true;
+  scene.add(terrainMesh);
+}
+
+function makePad(pad){
+  const g = new THREE.Group();
+  const plate = new THREE.Mesh(new THREE.BoxGeometry(pad.w, 0.35, 12),
+    new THREE.MeshStandardMaterial({ color:0xd9d9d9, roughness:.6, metalness:.3 }));
+  plate.position.y = 0.18; plate.receiveShadow = true;
+  g.add(plate);
+  const stripe = new THREE.Mesh(new THREE.BoxGeometry(pad.w*0.7, 0.06, 1.4),
+    new THREE.MeshBasicMaterial({ color:0x7CFC9A }));
+  stripe.position.y = 0.38;
+  g.add(stripe);
+  for (const sx of [-1,1]){
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.08,0.08,2.6,8),
+      new THREE.MeshStandardMaterial({ color:0x555555 }));
+    post.position.set(sx*pad.w/2*0.9, 1.3, 0);
+    g.add(post);
+    const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.22,12,12),
+      new THREE.MeshBasicMaterial({ color:0x7CFC9A }));
+    lamp.position.set(sx*pad.w/2*0.9, 2.7, 0);
+    g.add(lamp);
+  }
+  /* fuel tank on every pad, bigger for deep stations */
+  const tankR = pad.isDeep ? 1.1 : 0.7;
+  const tank = new THREE.Mesh(new THREE.CapsuleGeometry(tankR, tankR*1.6, 4, 12),
+    new THREE.MeshStandardMaterial({ color: pad.isDeep? 0xff8833 : 0x9aa0a8, roughness:.5, metalness:.4 }));
+  tank.position.set(0, tankR + 0.35, 4.4);
+  tank.castShadow = true;
+  g.add(tank);
+  /* beacon beam so the pad can be found from a distance */
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 1.1, 55, 10, 1, true),
+    new THREE.MeshBasicMaterial({ color:0x7CFC9A, transparent:true, opacity:0.13,
+      blending:THREE.AdditiveBlending, depthWrite:false, side:THREE.DoubleSide }));
+  beam.position.y = 28;
+  g.add(beam);
+  g.position.set(pad.x, pad.y, 0);
+  return g;
+}
+
+function makeAstronaut(){
+  const g = new THREE.Group();
+  const suit = new THREE.MeshStandardMaterial({ color:0xf2f2f2, roughness:.6 });
+  const pack = new THREE.MeshStandardMaterial({ color:0x9aa0a8, roughness:.7 });
+  const vis  = new THREE.MeshStandardMaterial({ color:0x88ccff, roughness:.15, metalness:.5 });
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.28, 0.5, 4, 8), suit);
+  body.position.y = 0.55; g.add(body);
+  const helmet = new THREE.Mesh(new THREE.SphereGeometry(0.26, 12, 10), vis);
+  helmet.position.y = 1.15; g.add(helmet);
+  const back = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.5, 0.22), pack);
+  back.position.set(0, 0.62, -0.3); g.add(back);
+  const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.09,8,8),
+    new THREE.MeshBasicMaterial({ color:0xffb020 }));
+  beacon.position.y = 1.52; g.add(beacon);
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.4, 24, 8, 1, true),
+    new THREE.MeshBasicMaterial({ color:0xffb020, transparent:true, opacity:0.16,
+      blending:THREE.AdditiveBlending, depthWrite:false, side:THREE.DoubleSide }));
+  beam.position.y = 14; g.add(beam);
+  g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  g.userData.beacon = beacon; g.userData.beam = beam;
+  return g;
+}
+
+function makeShuttle(){
+  const g = new THREE.Group();
+  const white = new THREE.MeshStandardMaterial({ color:0xe8e8ec, roughness:.5, metalness:.3 });
+  const orange = new THREE.MeshStandardMaterial({ color:0xff7733, roughness:.6 });
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.5, 2.2, 4, 10), white);
+  body.rotation.z = Math.PI/2; g.add(body);
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.5, 0.9, 10), orange);
+  nose.rotation.z = -Math.PI/2; nose.position.x = 1.55; g.add(nose);
+  const wing = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.08, 3.4), orange);
+  wing.position.x = -0.2; g.add(wing);
+  const eng = new THREE.Mesh(new THREE.ConeGeometry(0.35, 1.5, 10),
+    new THREE.MeshBasicMaterial({ color:0xff9030, transparent:true, opacity:.85,
+      blending:THREE.AdditiveBlending, depthWrite:false }));
+  eng.rotation.z = Math.PI/2; eng.position.x = -2.0; g.add(eng);
+  g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  return g;
+}
+
+/* ================= terrain helpers ================= */
+function terrainAt(x){
+  let t = (x + WORLD_W/2) / STEP;
+  t = Math.max(0, Math.min(N-1.001, t));
+  const i = Math.floor(t), f = t - i;
+  return heights[i]*(1-f) + heights[i+1]*f;
+}
+function slopeAt(x){
+  const i = Math.max(1, Math.min(N-2, Math.round((x + WORLD_W/2)/STEP)));
+  return (heights[i+1]-heights[i-1]) / (2*STEP);
+}
+function padAt(x){ return pads.find(p => Math.abs(p.x - x) <= p.w/2); }
+function groundYAt(x){ const p = padAt(x); return terrainAt(x) + (p ? 0.35 : 0); }
+
+/* ================= lander ================= */
+const lander = new THREE.Group();
+{
+  const hullMat = new THREE.MeshStandardMaterial({ color:0xe8e4da, roughness:.55, metalness:.35 });
+  const goldMat = new THREE.MeshStandardMaterial({ color:0xd4a017, roughness:.35, metalness:.7 });
+  const darkMat = new THREE.MeshStandardMaterial({ color:0x3a3a40, roughness:.8 });
+
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.1, 1.5, 10), hullMat);
+  body.position.y = 0.4; lander.add(body);
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.75, 0.9, 10), goldMat);
+  nose.position.y = 1.7; lander.add(nose);
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(0.34, 14, 12),
+    new THREE.MeshStandardMaterial({ color:0x88ccff, roughness:.1, metalness:.6 }));
+  dome.position.set(0, 1.3, -0.45); lander.add(dome);
+
+  for (const sx of [-1,1]){
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.5, 0.12), darkMat);
+    leg.position.set(sx*1.0, -0.75, 0);
+    leg.rotation.z = sx * -0.5;
+    lander.add(leg);
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.12, 0.3), darkMat);
+    foot.position.set(sx*1.35, -1.42, 0);
+    lander.add(foot);
+  }
+  const nozzle = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.42, 0.35, 10), darkMat);
+  nozzle.position.y = -0.55; lander.add(nozzle);
+
+  const flame = new THREE.Mesh(new THREE.ConeGeometry(0.42, 2.2, 10),
+    new THREE.MeshBasicMaterial({ color:0xffb040, transparent:true, opacity:0,
+      blending:THREE.AdditiveBlending, depthWrite:false }));
+  flame.rotation.x = Math.PI;
+  flame.position.y = -1.75; lander.add(flame);
+  lander.userData.flame = flame;
+  const flameLight = new THREE.PointLight(0xff9030, 0, 24);
+  flameLight.position.y = -1.6; lander.add(flameLight);
+  lander.userData.flameLight = flameLight;
+
+  lander.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  scene.add(lander);
+}
+const LEG_Y = -1.42, LEG_X = 1.35;
+
+function legWorld(){
+  const c = Math.cos(ang), s = Math.sin(ang);
+  const feet = [];
+  for (const sx of [-1,1]){
+    const lx = sx*LEG_X, ly = LEG_Y;
+    feet.push({ x: px + lx*c - ly*s, y: py + lx*s + ly*c });
+  }
+  return feet;
+}
+
+/* ================= audio of boarding ================= */
+function boardAstronaut(a){
+  a.state = 'aboard';
+  pax++;
+  lander.attach(a.mesh);
+  a.mesh.position.set(0, 1.55, 0.62);
+  a.mesh.scale.setScalar(0.8);
+  a.mesh.rotation.set(0,0,0);
+  a.mesh.userData.beam.visible = false;
+  audio.fanfare('rescue');
+}
+function deliverAstronauts(pad){
+  const crew = astronauts.filter(a => a.state === 'aboard');
+  crew.forEach((a, idx) => {
+    a.state = 'delivered';
+    scene.attach(a.mesh);
+    const off = (idx - (crew.length - 1)/2) * 1.3;
+    a.mesh.position.set(pad.x + off, pad.y + 0.35, 3.2);
+    a.mesh.scale.setScalar(0.8);
+    a.mesh.userData.beacon.material.color.set(0x55ff88);
+    a.mesh.userData.beam.material.color.set(0x55ff88);
+    a.mesh.userData.beam.visible = true;
+    pad.delivered.push(a);
+  });
+}
+
+/* ================= shuttles ================= */
+function spawnShuttle(pad){
+  const m = makeShuttle();
+  m.position.set(pad.x - 150, pad.y + 55, 9);
+  scene.add(m);
+  shuttles.push({ mesh:m, t:0, phase:'in', pad });
+}
+function updateShuttles(dt){
+  for (let i = shuttles.length-1; i >= 0; i--){
+    const s = shuttles[i];
+    s.t += dt;
+    const p = s.pad;
+    if (s.phase === 'in'){
+      const k = Math.min(1, s.t/2.4), e = k*k*(3-2*k);
+      s.mesh.position.set(p.x - 150 + 150*e, p.y + 55 - 48*e, 9);
+      if (k >= 1){ s.phase = 'hold'; s.t = 0; }
+    } else if (s.phase === 'hold'){
+      s.mesh.position.set(p.x, p.y + 7 + Math.sin(s.t*4)*0.3, 9);
+      if (s.t > 1.1){ s.phase = 'out'; s.t = 0; }
+    } else {
+      const k = Math.min(1, s.t/2.0), e = k*k;
+      s.mesh.position.set(p.x + 170*e, p.y + 7 + 95*e, 9);
+      p.delivered.forEach(a => a.mesh.scale.setScalar(Math.max(0.001, 0.8*(1-e))));
+      if (k >= 1){
+        p.delivered.forEach(a => scene.remove(a.mesh));
+        scene.remove(s.mesh);
+        shuttles.splice(i, 1);
+      }
+    }
+  }
+}
+
+/* ================= fuel synth mini-game ================= */
+const DIRS = ['▲','▼','◀','▶'];
+const MINIKEYS = { ArrowUp:0, KeyW:0, ArrowDown:1, KeyS:1, ArrowLeft:2, KeyA:2, ArrowRight:3, KeyD:3 };
+
+function synthAvailable(){
+  return state === 'playing' && grounded && !mini && synthCd <= 0;
+}
+function renderMini(){
+  const box = document.getElementById('minislots');
+  box.innerHTML = mini.seq.map((d,i) =>
+    `<span class="mslot ${i<mini.idx?'done':(i===mini.idx?'cur':'')}">${DIRS[d]}</span>`
+  ).join('');
+  document.getElementById('ministatus').textContent = `REPRODUCE THE SEQUENCE  (${mini.idx}/${mini.seq.length})`;
+}
+function openMini(){
+  if (!synthAvailable()) return;
+  const len = 4 + Math.min(2, stage - 1);   /* 4 arrows on stage 1, up to 6 later */
+  mini = { seq: Array.from({length:len}, () => (Math.random()*4)|0), idx: 0 };
+  keys.clear();                              /* no accidental takeoff mid-game */
+  renderMini();
+  document.getElementById('mini').classList.remove('hidden');
+  document.getElementById('minidpad').classList.remove('hidden');
+  document.getElementById('touch').classList.add('hidden');
+  hudUpdate();
+}
+function closeMini(){
+  mini = null;
+  document.getElementById('mini').classList.add('hidden');
+  document.getElementById('minidpad').classList.add('hidden');
+  if (matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0) showTouch();
+  hudUpdate();
+}
+function miniPress(dir){
+  if (!mini) return;
+  if (dir === mini.seq[mini.idx]){
+    mini.idx++;
+    if (mini.idx >= mini.seq.length){
+      fuel = Math.min(FUEL_MAX, fuel + SYNTH_REWARD);
+      audio.fanfare('deliver');
+      closeMini();
+      showMsg(`FUEL SYNTH COMPLETE  +${SYNTH_REWARD} FUEL`);
+    } else {
+      audio.beep(480 + mini.idx*70, .07, 'square', .04);
+      renderMini();
+    }
+  } else {
+    audio.beep(140, .3, 'sawtooth', .07);
+    synthCd = SYNTH_CD;
+    closeMini();
+    showMsg('SYNTH FAILED — COOLING DOWN', '#ff6b4a');
+  }
+  hudUpdate();
+}
+function cancelMini(){
+  if (!mini) return;
+  closeMini();
+  showMsg('SYNTH CANCELLED');
+}
+/* D-pad wiring (touch) */
+document.querySelectorAll('#minidpad button').forEach(b => {
+  const d = +b.dataset.d;
+  const on = e => { e.preventDefault(); e.stopPropagation(); b.classList.add('on'); miniPress(d); };
+  const off = e => { e.preventDefault(); b.classList.remove('on'); };
+  b.addEventListener('touchstart', on, { passive:false });
+  b.addEventListener('touchend', off, { passive:false });
+  b.addEventListener('touchcancel', off, { passive:false });
+  b.addEventListener('mousedown', on);
+  b.addEventListener('mouseup', off);
+});
+/* synth button wiring (click / tap) */
+document.getElementById('synthbtn').addEventListener('click', () => openMini());
+
+/* ================= game flow ================= */
+function startGame(){ audio.ensure(); state = 'playing'; }
+
+function resetStage(){
+  /* detach / remove every astronaut mesh from wherever it lives (scene, lander, world) */
+  astronauts.forEach(a => { if (a.mesh.parent) a.mesh.parent.remove(a.mesh); });
+  shuttles.forEach(s => scene.remove(s.mesh));
+
+  buildStage();
+  fuel = FUEL_MAX;
+  px = 0; py = terrainAt(0) + 24;
+  vx = (Math.random()-0.5)*1.6; vy = 0;
+  ang = 0; angV = 0; grounded = false;
+  lander.visible = true;
+  lander.position.set(px, py, 0);
+  lander.rotation.z = 0;
+  lander.userData.flame.material.opacity = 0;
+  lander.userData.flameLight.intensity = 0;
+  hideMsg();
+  hudUpdate();
+  state = 'playing';
+}
+
+function resolveLanding(){
+  const pad = padAt(px);
+  const cand = astronauts
+    .filter(a => a.state === 'stranded')
+    .sort((a,b) => Math.abs(a.x-px) - Math.abs(b.x-px))[0];
+  const astra = cand && Math.abs(cand.x - px) <= RESCUE_RADIUS ? cand : null;
+
+  let msgs = [];
+  if (pad){
+    if (pax > 0){
+      const pts = Math.round(pax * 100 * pad.scoreMult);
+      score += pts;
+      deliverAstronauts(pad);
+      const lost = pax; pax = 0;
+      const add = Math.min(FUEL_MAX - fuel, pad.fuelBonus);
+      fuel += add;
+      msgs.unshift(`DELIVERED ${lost} CREW  +${pts}` + (pad.isDeep ? '  [DEEP STATION]' : pad.isCliff ? '  [CLIFF PAD]' : '') + `   FUEL +${Math.round(add)}`);
+      audio.fanfare('deliver');
+      spawnShuttle(pad);
+    } else {
+      const add = Math.min(FUEL_MAX - fuel, pad.fuelBonus);
+      fuel += add;
+      msgs.unshift(add > 0 ? `FUEL STATION  +${Math.round(add)} FUEL` : 'FUEL ALREADY FULL');
+      audio.beep(440, .1, 'sine', .04);
+    }
+  }
+  if (astra){
+    if (pax < MAX_PAX){
+      boardAstronaut(astra);
+      msgs.push(`RESCUED!  CREW ABOARD ${pax}/${MAX_PAX}`);
+    } else {
+      msgs.push('CABIN FULL — DELIVER CREW AT A PAD FIRST');
+    }
+  }
+  if (!pad && !astra) msgs.push('SAFE LANDING — TAKE OFF TO CONTINUE');
+
+  showMsg(msgs.join('   •   '));
+  hudUpdate();
+
+  if (astronauts.every(a => a.state === 'delivered')){
+    state = 'clearing';
+    setTimeout(stageComplete, 1400);
+  }
+}
+
+function stageComplete(){
+  const bonus = 150 + stage * 50;
+  score += bonus;
+  audio.fanfare('stage');
+  hudUpdate();
+  showOverlay(
+    `STAGE ${stage} COMPLETE`,
+    `All ${astronauts.length} astronauts delivered to base.<br/>STAGE BONUS &nbsp;+${bonus}<br/>TOTAL SCORE &nbsp;${score}<br/><br/>Next sector: more crew, wider terrain, trickier ground.`,
+    'NEXT STAGE',
+    () => { stage++; resetStage(); }
+  );
+}
+
+function crash(reason){
+  state = 'crashed';
+  lander.rotation.z = ang + 0.45;
+  audio.thrust(false);
+  audio.fanfare('crash');
+  const lost = pax;
+  showOverlay(
+    'MISSION FAILED',
+    `${reason}<br/>${lost > 0 ? `${lost} crew member(s) lost with the lander.<br/>` : ''}SCORE &nbsp;${score}<br/>RESCUED SO FAR &nbsp;${astronauts.filter(a=>a.state==='delivered').length}`,
+    'RETRY STAGE',
+    () => resetStage(),
+    '#ff6b4a'
+  );
+}
+
+/* ================= input ================= */
+const keys = new Set();
+const KEYMAP = {
+  ArrowLeft:'L', KeyA:'L',
+  ArrowRight:'R', KeyD:'R',
+  ArrowUp:'U', KeyW:'U',
+  ArrowDown:'B', KeyS:'B',
+};
+addEventListener('keydown', e => {
+  /* fuel synth mini-game captures the direction keys */
+  if (mini){
+    if (MINIKEYS[e.code] !== undefined){ e.preventDefault(); miniPress(MINIKEYS[e.code]); }
+    else if (e.code === 'Escape' || e.code === 'KeyX'){ e.preventDefault(); cancelMini(); }
+    return;
+  }
+  if (e.code === 'KeyF' || e.code === 'Space'){
+    if (synthAvailable()){ e.preventDefault(); openMini(); }
+    return;
+  }
+  if (KEYMAP[e.code]){ keys.add(KEYMAP[e.code]); e.preventDefault(); }
+  if (e.code === 'KeyR' && (state === 'playing' || state === 'crashed')) resetStage();
+  if (e.code === 'Enter' && state === 'ready') startGame();
+});
+addEventListener('keyup', e => { if (KEYMAP[e.code]) keys.delete(KEYMAP[e.code]); });
+
+/* ---- touch controls ---- */
+const touchEl = document.getElementById('touch');
+function showTouch(){ touchEl.classList.remove('hidden'); }
+if (matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0) showTouch();
+addEventListener('touchstart', () => showTouch(), { once:true, passive:true });
+touchEl.querySelectorAll('button').forEach(b => {
+  const k = b.dataset.k;
+  const on = e => { e.preventDefault(); e.stopPropagation(); keys.add(k); b.classList.add('on'); };
+  const off = e => { e.preventDefault(); e.stopPropagation(); keys.delete(k); b.classList.remove('on'); };
+  b.addEventListener('touchstart', on, { passive:false });
+  b.addEventListener('touchend', off, { passive:false });
+  b.addEventListener('touchcancel', off, { passive:false });
+  b.addEventListener('mousedown', on);
+  b.addEventListener('mouseup', off);
+  b.addEventListener('mouseleave', off);
+});
+
+/* ================= update ================= */
+function update(dt){
+  if (state !== 'playing') return;
+
+  /* fuel synth in progress: freeze flight input */
+  if (mini){
+    audio.thrust(false);
+    lander.position.set(px, py, 0);
+    lander.rotation.z = ang;
+    return;
+  }
+
+  /* rotation control (works grounded & airborne) */
+  let rot = 0;
+  if (keys.has('L')) rot += 1;   /* +ang = counter-clockwise on screen = nose left */
+  if (keys.has('R')) rot -= 1;
+  angV += rot * ROT_RATE * dt * 3.2;
+  angV *= Math.pow(0.02, dt);
+  ang += angV * dt;
+
+  if (grounded){
+    if (keys.has('U') && fuel > 0){
+      grounded = false;          /* takeoff */
+    } else {
+      lander.userData.flame.material.opacity += (0 - lander.userData.flame.material.opacity) * Math.min(1, dt*12);
+      lander.userData.flameLight.intensity = 0;
+      audio.thrust(false);
+      lander.position.set(px, py, 0);
+      lander.rotation.z = ang;
+      hudUpdate();
+      return;
+    }
+  }
+
+  /* main thrust along lander up-axis */
+  let thrusting = false;
+  if (keys.has('U') && fuel > 0){
+    thrusting = true;
+    /* lander up-axis in world coords is (-sin a, cos a) */
+    vx -= Math.sin(ang) * THRUST * dt;
+    vy += Math.cos(ang) * THRUST * dt;
+    fuel = Math.max(0, fuel - FUEL_RATE * dt);
+  }
+  /* retro brake */
+  if (keys.has('B') && fuel > 0){
+    thrusting = true;
+    const sp = Math.hypot(vx, vy);
+    if (sp > 0.01){
+      const a = Math.min(BRAKE, sp/dt) * dt;
+      vx -= vx/sp * a; vy -= vy/sp * a;
+      fuel = Math.max(0, fuel - BRAKE_RATE * dt);
+    }
+  }
+  if (fuel === 0 && !fuelOutWarned){
+    fuelOutWarned = true;
+    showMsg('FUEL EXHAUSTED — LAND & RE-FUEL AT A STATION', '#ff6b4a');
+  }
+  audio.thrust(thrusting, keys.has('U'));
+
+  const fl = lander.userData.flame;
+  const target = thrusting ? (keys.has('U') ? 0.95 : 0.55) : 0;
+  fl.material.opacity += (target - fl.material.opacity) * Math.min(1, dt*14);
+  fl.scale.set(1, 0.8 + Math.random()*0.4, 1);
+  lander.userData.flameLight.intensity = fl.material.opacity * 6;
+
+  /* gravity + integrate */
+  vy -= G * dt;
+  px += vx * dt;
+  py += vy * dt;
+
+  /* world bounds */
+  if (Math.abs(px) > WORLD_W/2 + 6 || py > 240){
+    lander.visible = false;
+    crash('LOST IN THE VOID');
+    return;
+  }
+
+  /* boulders */
+  for (const rk of boulders){
+    const dx = px - rk.x, dy = py - rk.y;
+    if (dx*dx + dy*dy < (rk.r*0.8 + 1.0)**2){
+      crash('STRUCK A BOULDER');
+      return;
+    }
+  }
+
+  /* ground contact via feet */
+  const feet = legWorld();
+  let hit = null;
+  for (const f of feet){
+    if (f.y <= groundYAt(f.x)){ hit = f; break; }
+  }
+  if (hit){
+    const slope = Math.abs(slopeAt(hit.x));
+    const norm = ((ang % (Math.PI*2)) + Math.PI*2) % (Math.PI*2);
+    const tilt = Math.min(norm, Math.PI*2 - norm);
+    const gentle = Math.abs(vy) < VSAFE && Math.abs(vx) < HSAFE && tilt < ASAFE && slope < 0.30;
+
+    const gY = groundYAt(hit.x);
+    py = gY - LEG_Y * Math.cos(ang);
+    lander.position.set(px, py, 0);
+
+    if (gentle){
+      vx = 0; vy = 0; ang = 0; angV = 0;
+      lander.rotation.z = 0;
+      grounded = true;
+      resolveLanding();
+    } else {
+      crash(slope > 0.30 ? 'SLOPE TOO STEEP'
+            : Math.abs(vy) > VSAFE ? 'DESCENT TOO FAST'
+            : 'TOO MUCH DRIFT / TILT');
+    }
+    return;
+  }
+
+  lander.position.set(px, py, 0);
+  lander.rotation.z = ang;
+  hudUpdate();
+}
+
+/* ================= radar ================= */
+const radarCv = document.getElementById('radarcv');
+const rctx = radarCv.getContext('2d');
+const RADAR_RANGE = 130;          /* world units shown in the radar disc */
+const RADAR_PX = 150;
+const RDPR = Math.min(devicePixelRatio || 1, 2);
+radarCv.width = RADAR_PX * RDPR;
+radarCv.height = RADAR_PX * RDPR;
+let sweepA = 0;
+const blipGlow = new Map();
+
+function radarDraw(dt, now){
+  sweepA = (sweepA + dt * 1.5) % (Math.PI * 2);
+  const W = RADAR_PX, C = W/2, R = 62;
+  rctx.setTransform(RDPR,0,0,RDPR,0,0);
+  rctx.clearRect(0,0,W,W);
+  rctx.save();
+  rctx.beginPath(); rctx.arc(C,C,C-1,0,Math.PI*2); rctx.clip();
+  rctx.fillStyle = 'rgba(3,14,8,0.92)'; rctx.fillRect(0,0,W,W);
+
+  /* range rings + cross */
+  rctx.strokeStyle = 'rgba(124,252,154,0.20)'; rctx.lineWidth = 1;
+  for (const f of [0.33, 0.66, 1]){
+    rctx.beginPath(); rctx.arc(C,C,R*f,0,Math.PI*2); rctx.stroke();
+  }
+  rctx.beginPath();
+  rctx.moveTo(C-R,C); rctx.lineTo(C+R,C);
+  rctx.moveTo(C,C-R); rctx.lineTo(C,C+R);
+  rctx.stroke();
+
+  /* sonar sweep */
+  if (rctx.createConicGradient){
+    const g = rctx.createConicGradient(sweepA, C, C);
+    g.addColorStop(0, 'rgba(124,252,154,0.30)');
+    g.addColorStop(0.10, 'rgba(124,252,154,0.05)');
+    g.addColorStop(0.25, 'rgba(124,252,154,0)');
+    g.addColorStop(1, 'rgba(124,252,154,0)');
+    rctx.fillStyle = g;
+    rctx.beginPath(); rctx.arc(C,C,R,0,Math.PI*2); rctx.fill();
+  }
+  rctx.strokeStyle = 'rgba(124,252,154,0.75)';
+  rctx.beginPath(); rctx.moveTo(C,C);
+  rctx.lineTo(C + Math.cos(sweepA)*R, C + Math.sin(sweepA)*R);
+  rctx.stroke();
+
+  /* blips (far targets clamp to the rim -> bearing only) */
+  const draw = (wx, wy, kind, key) => {
+    const dx = wx - px, dy = wy - py;
+    const d = Math.hypot(dx,dy);
+    const k = d <= RADAR_RANGE ? R/RADAR_RANGE : R/d;
+    const sx = C + dx*k, sy = C - dy*k;
+    let g = blipGlow.get(key) || 0;
+    const theta = Math.atan2(sy - C, sx - C);
+    let da = Math.abs(theta - sweepA) % (Math.PI*2);
+    da = Math.min(da, Math.PI*2 - da);
+    if (da < 0.4) g = 1;
+    g *= Math.exp(-dt*1.1);
+    blipGlow.set(key, g);
+    if (kind === 'crew'){
+      const a = 0.35 + 0.65*g;
+      rctx.fillStyle = `rgba(255,176,32,${a})`;
+      rctx.beginPath(); rctx.arc(sx,sy,3,0,Math.PI*2); rctx.fill();
+      rctx.strokeStyle = `rgba(255,176,32,${a*0.5})`;
+      rctx.beginPath(); rctx.arc(sx,sy,5.5 + Math.sin(now*0.006)*1.2,0,Math.PI*2); rctx.stroke();
+    } else if (kind === 'pad'){
+      const a = 0.4 + 0.6*g;
+      rctx.fillStyle = `rgba(124,252,154,${a})`;
+      rctx.save(); rctx.translate(sx,sy); rctx.rotate(Math.PI/4);
+      rctx.fillRect(-3.5,-3.5,7,7);
+      rctx.restore();
+    } else {
+      const a = 0.22 + 0.4*g;
+      rctx.fillStyle = `rgba(150,150,160,${a})`;
+      rctx.beginPath(); rctx.arc(sx,sy,1.8,0,Math.PI*2); rctx.fill();
+    }
+  };
+  astronauts.forEach((a,i) => { if (a.state === 'stranded') draw(a.x, a.y, 'crew', 'c'+i); });
+  pads.forEach((p,i) => draw(p.x, p.y, 'pad', 'p'+i));
+  boulders.forEach((b,i) => draw(b.x, b.y, 'rock', 'r'+i));
+
+  /* lander heading (center) */
+  const nx = -Math.sin(ang), ny = -Math.cos(ang);
+  const ox = -ny, oy = nx;
+  rctx.fillStyle = '#eafff0';
+  rctx.shadowColor = 'rgba(124,252,154,0.9)'; rctx.shadowBlur = 6;
+  rctx.beginPath();
+  rctx.moveTo(C + nx*8, C + ny*8);
+  rctx.lineTo(C - nx*4 + ox*4.5, C - ny*4 + oy*4.5);
+  rctx.lineTo(C - nx*4 - ox*4.5, C - ny*4 - oy*4.5);
+  rctx.closePath(); rctx.fill();
+  rctx.shadowBlur = 0;
+  rctx.restore();
+
+  /* rim */
+  rctx.strokeStyle = 'rgba(124,252,154,0.55)';
+  rctx.lineWidth = 1.5;
+  rctx.beginPath(); rctx.arc(C,C,C-1,0,Math.PI*2); rctx.stroke();
+}
+
+/* ================= frame loop ================= */
+let last = performance.now();
+function frame(now){
+  requestAnimationFrame(frame);
+  const dt = Math.min(0.033, (now - last)/1000);
+  last = now;
+
+  update(dt);
+  updateShuttles(dt);
+  radarDraw(dt, now);
+  if (synthCd > 0) synthCd = Math.max(0, synthCd - dt);
+
+  /* sun follows the lander for crisp local shadows */
+  sun.position.set(px + 70, Math.max(py, 0) + 90, 60);
+  sun.target.position.set(px, py, 0);
+  sun.target.updateMatrixWorld();
+
+  const camT = new THREE.Vector3(px, py + 3, 46);
+  camera.position.lerp(camT, Math.min(1, dt*4));
+  camera.lookAt(px, py, 0);
+
+  if (state === 'ready'){
+    lander.position.y = py + Math.sin(now*0.001)*0.6;
+  }
+
+  renderer.render(scene, camera);
+}
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+/* ================= boot ================= */
+buildStage();
+px = 0; py = terrainAt(0) + 24;
+lander.position.set(px, py, 0);
+hudUpdate();
+
+showOverlay(
+  'LUNAR LANDER',
+  'RESCUE MISSION<br/><br/>' +
+  'Astronauts are stranded across the sector — some on high cliffs, some in deep caverns.<br/>' +
+  'Land beside them to <b>board up to 3 crew</b>, then deliver them to a <b>green pad</b>.<br/>' +
+  'Deep pads pay more and hold the best <b>fuel</b>. Rescue everyone to clear the stage.<br/>' +
+  'Landed and running low? Press <b>F</b> (or the ⚡ button) to run the <b>FUEL SYNTH</b> pattern game for an instant top-up.<br/>' +
+  'The <b>RADAR</b> (left) tracks <span style="color:#7CFC9A">green pads</span> &amp; <span style="color:#ffb020">amber crew</span> — fly toward the blips.<br/><br/>' +
+  '<span style="opacity:.8">←/→ or A/D rotate &nbsp;•&nbsp; ↑/W thrust &nbsp;•&nbsp; ↓/S brake &nbsp;•&nbsp; F synth (landed) &nbsp;•&nbsp; R retry</span><br/>' +
+  '<span style="opacity:.8">Touch controls appear on mobile.</span>',
+  'LAUNCH',
+  startGame
+);
+
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
